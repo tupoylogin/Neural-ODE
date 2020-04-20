@@ -3,7 +3,6 @@ import warnings
 from typing import Iterable
 
 import tensorflow as tf
-from tensorflow.python import ops
 
 
 def cast_double(x):
@@ -196,7 +195,7 @@ def _decreasing(t):
 
 
 def _assert_increasing(t):
-    assert tf.reduce_all(t[1:] > t[:-1]), 't must be strictly increasing or decrasing'
+    assert tf.reduce_all(t[1:] > t[:-1]), 't must be strictly increasing or decreasing'
 
 
 def _is_iterable(inputs):
@@ -339,7 +338,7 @@ def _check_inputs(func, y0, t):
     if isinstance(y0, tf.Tensor):
         tensor_input = True
 
-        if not isinstance(y0, ops.EagerTensor):
+        if not isinstance(y0, tf.python.ops.EagerTensor):
             warnings.warn('Input is *not* an EagerTensor ! '
                           'Dummy op with zeros will be performed instead.')
 
@@ -350,7 +349,7 @@ def _check_inputs(func, y0, t):
 
         def base_nontuple_func(t, y):
             return (_base_nontuple_func_(t, y[0]),)
-        func = base_nontuple_func(t, y)
+        func = base_nontuple_func
 
     if ((type(y0) == tuple) or (type(y0) == list)):
         if not tensor_input:
@@ -361,7 +360,7 @@ def _check_inputs(func, y0, t):
                 assert isinstance(y0[i], tf.Tensor), 'each element must be a tf.Tensor ' \
                                                      'but received {}'.format(type(y0[i]))
 
-                if not isinstance(y0[i], ops.EagerTensor):
+                if not isinstance(y0[i], tf.python.ops.EagerTensor):
                     warnings.warn('Input %d (zero-based) is *not* an EagerTensor ! '
                                   'Dummy op with zeros will be performed instead.' % (i))
 
@@ -377,7 +376,7 @@ def _check_inputs(func, y0, t):
 
         def base_reverese_func(t, y):
             return tuple(-f_ for f_ in _base_reverse_func(-t, y))
-        func = base_reverese_func(t, y)
+        func = base_reverese_func
 
     for y0_ in y0:
         if not tf.debugging.is_numeric_tensor(y0_):

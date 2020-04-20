@@ -17,12 +17,12 @@ gamma_star = [
     -0.00678585, -0.00592406, -0.00523669, -0.0046775, -0.00421495, -0.0038269
 ]
 
+"""Saved state of the variable step size Adams-Bashforth-Moulton solver as described in
+    Solving Ordinary Differential Equations I - Nonstiff Problems III.5
+    by Ernst Hairer, Gerhard Wanner, and Syvert P Norsett.
+"""
+_VCABMState =collections.namedtuple('_VCABMState', 'y_n, prev_f, prev_t, next_t, phi, order')
 
-class _VCABMState(collections.namedtuple('_VCABMState', 'y_n, prev_f, prev_t, next_t, phi, order')):
-    """Saved state of the variable step size Adams-Bashforth-Moulton solver as described in
-        Solving Ordinary Differential Equations I - Nonstiff Problems III.5
-        by Ernst Hairer, Gerhard Wanner, and Syvert P Norsett.
-    """
 
 
 def g_and_explicit_phi(prev_t, next_t, implicit_phi, k):
@@ -80,8 +80,8 @@ def compute_implicit_phi(explicit_phi, f_n, k):
 class VariableCoefficientAdamsBashforth(AdaptiveStepsizeODESolver):
 
     def __init__(
-            self, func, y0, rtol, atol, implicit=True, max_order=_MAX_ORDER, safety=0.9, ifactor=10.0, dfactor=0.2,
-            **unused_kwargs
+            self, func, y0, rtol, atol, implicit=True, first_step=None, max_order=_MAX_ORDER, safety=0.9, 
+            ifactor=10.0, dfactor=0.2, **unused_kwargs
     ):
         _handle_unused_kwargs(self, unused_kwargs)
         del unused_kwargs
@@ -91,6 +91,7 @@ class VariableCoefficientAdamsBashforth(AdaptiveStepsizeODESolver):
         self.rtol = rtol if _is_iterable(rtol) else [rtol] * len(y0)
         self.atol = atol if _is_iterable(atol) else [atol] * len(y0)
         self.implicit = implicit
+        self.first_step = first_step
         self.max_order = int(max(_MIN_ORDER, min(max_order, _MAX_ORDER)))
         self.safety = _convert_to_tensor(safety, dtype=tf.float64, device=y0[0].device)
         self.ifactor = _convert_to_tensor(ifactor, dtype=tf.float64, device=y0[0].device)
@@ -100,13 +101,15 @@ class VariableCoefficientAdamsBashforth(AdaptiveStepsizeODESolver):
         prev_f = collections.deque(maxlen=self.max_order + 1)
         prev_t = collections.deque(maxlen=self.max_order + 1)
         phi = collections.deque(maxlen=self.max_order)
-
         t0 = t[0]
         f0 = self.func(tf.cast(t0, self.y0[0].dtype), self.y0)
         prev_t.appendleft(t0)
         prev_f.appendleft(f0)
         phi.appendleft(f0)
-        first_step = _select_initial_step(self.func, t[0], self.y0, 2, self.rtol[0], self.atol[0], f0=f0)
+        if self.first_step is None:
+            first_step = _select_initial_step(self.func, t[0], self.y0, 2, self.rtol[0], self.atol[0], f0=f0).to(t)
+        else:
+            first_step = _select_initial_step(self.func, t[0], self.y0, 2, self.rtol[0], self.atol[0], f0=f0).to(t)
         first_step = move_to_device(first_step, t.device)
         first_step = tf.cast(first_step, t[0].dtype)
 

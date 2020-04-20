@@ -1,9 +1,8 @@
 import numpy as np
 from typing import Iterable
 
-from keras.models import Model
 import tensorflow as tf
-from tensorflow.python.eager.context import eager_mode
+
 from solver.odeint import odeint
 from solver.misc import (_flatten, _flatten_convert_none_to_zeros,
                          move_to_device, cast_double, func_cast_double,
@@ -231,13 +230,13 @@ def odeint_adjoint(func, y0, t, rtol=1e-6, atol=1e-12, method=None, options=None
     """
     # We need this in order to access the variables inside this module,
     # since we have no other way of getting variables along the execution path.
-    if not isinstance(func, Model):
+    if not isinstance(func, tf.keras.models.Model):
         raise ValueError('func is required to be an instance of Model')
 
-    with eager_mode():
+    with tf.python.eager.context.eager_mode():
         tensor_input = False
         if tf.debugging.is_numeric_tensor(y0):
-            class TupleFunc(Model):
+            class TupleFunc(tf.keras.models.Model):
 
                 def __init__(self, base_func, **kwargs):
                     super(TupleFunc, self).__init__(**kwargs)
