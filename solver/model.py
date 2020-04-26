@@ -44,7 +44,6 @@ class Decoder(tf.keras.Model):
         out = self.fc2(out)
         return out
 
-
 class RunningAverageMeter(object):
     """Computes and stores the average and current value"""
 

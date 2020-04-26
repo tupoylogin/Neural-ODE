@@ -1,7 +1,7 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
-from solver.model import Decoder, ODERNNEncoder, VAEBaseline
 
+from solver.model import Decoder, ODERNNEncoder, VAEBaseline
 from solver.odeint import odeint
 from solver.adjoint import odeint_adjoint
 

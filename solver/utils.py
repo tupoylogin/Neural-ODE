@@ -11,6 +11,7 @@ import glob
 import re
 from shutil import copyfile
 import sklearn as sk
+import sklearn.metrics as skm
 import subprocess
 import datetime
 
@@ -50,7 +51,7 @@ def get_logger(logpath, filepath, package_files=[],
     return logger
 
 def inf_generator(iterable):
-    """Allows training with DataLoaders in a single infinite loop:
+    """Allows training with tf RepeatDataset in a single infinite loop:
         for i, (x, y) in enumerate(inf_generator(train_loader)):
     """
     iterator = iterable.__iter__()
@@ -69,34 +70,19 @@ def load_pickle(filename):
         filecontent = pickle.load(pkl_file)
     return filecontent
 
-def make_dataset(dataset_type = "spiral",**kwargs):
-    if dataset_type == "spiral":
-        data_path = "data/spirals.pickle"
-        dataset = load_pickle(data_path)["dataset"]
-        chiralities = load_pickle(data_path)["chiralities"]
-    elif dataset_type == "chiralspiral":
-        data_path = "data/chiral-spirals.pickle"
-        dataset = load_pickle(data_path)["dataset"]
-        chiralities = load_pickle(data_path)["chiralities"]
-    else:
-        raise Exception("Unknown dataset type " + dataset_type)
-    return dataset, chiralities
-
-
 def split_last_dim(data):
     last_dim = data.shape[-1]
     last_dim = last_dim//2
 
-    if len(data.size()) == 3:
+    if len(data.shape) == 3:
         res = data[:,:,:last_dim], data[:,:,last_dim:]
 
-    if len(data.size()) == 2:
+    if len(data.shape) == 2:
         res = data[:,:last_dim], data[:,last_dim:]
     return res
 
 def flatten(x, dim):
     return tf.reshape(x, (x.shape[:dim] + (-1, )))
-
 
 def subsample_timepoints(data, time_steps, n_tp_to_sample = None):
     # n_tp_to_sample: number of time points to subsample. If not None, sample exactly n_tp_to_sample points
@@ -156,9 +142,9 @@ def split_train_test_data_and_time(data, time_steps, train_fraq = 0.8):
 
     return data_train, data_test, train_time_steps, test_time_steps
 
-def get_next_batch(dataloader):
+def get_next_batch(data):
     # Make the union of all time points and perform normalization across the whole dataset
-    data_dict = dataloader.__next__()
+    data_dict = data.__next__()
     batch_dict = get_dict_template()
 
     # remove the time points where there are no observations in this batch
@@ -197,7 +183,7 @@ def update_learning_rate_optimizer(optimizer, initial_lr=0.1, decay_steps=1009, 
     return optimizer(**kwargs)
 
 def reverse(tensor):
-    idx = [i for i in range(tensor.size(0)-1, -1, -1)]
+    idx = [i for i in range(tensor.shape[0]-1, -1, -1)]
     return tensor[idx]
 
 def create_net(n_inputs, n_outputs, n_layers = 1, 
@@ -225,7 +211,7 @@ def get_dict_template():
             }
 
 def normalize_data(data):
-    reshaped = data.reshape(-1, data.size(-1))
+    reshaped = data.reshape(-1, data.shape[-1])
 
     att_min = tf.reduce_min(reshaped, 0)[0]
     att_max = tf.reduce_max(reshaped, 0)[0]
@@ -243,10 +229,8 @@ def normalize_data(data):
 
     return data_norm, att_min, att_max
 
-def split_data_extrap(data_dict, dataset = ""):
+def split_data_extrap(data_dict):
     n_observed_tp = data_dict["data"].shape[1] // 2
-    if dataset == "hopper":
-        n_observed_tp = data_dict["data"].shape[1] // 3
 
     split_dict = {"observed_data": tf.identity(data_dict["data"][:,:n_observed_tp,:]),
                 "observed_tp": tf.identity(data_dict["time_steps"][:n_observed_tp]),
@@ -267,8 +251,6 @@ def split_data_interp(data_dict):
                 "data_to_predict": tf.identity(data_dict["data"]),
                 "tp_to_predict": tf.identity(data_dict["time_steps"])}
 
-    split_dict["observed_mask"] = None 
-    split_dict["mask_predicted_data"] = None 
     split_dict["labels"] = None 
 
     if ("labels" in data_dict) and (data_dict["labels"] is not None):
@@ -277,14 +259,13 @@ def split_data_interp(data_dict):
     split_dict["mode"] = "interp"
     return split_dict
 
-
 def subsample_observed_data(data_dict, n_tp_to_sample = None, n_points_to_cut = None):
     # n_tp_to_sample -- if not None, randomly subsample the time points. The resulting timeline has n_tp_to_sample points
     # n_points_to_cut -- if not None, cut out consecutive points on the timeline.  The resulting timeline has (N - n_points_to_cut) points
 
     if n_tp_to_sample is not None:
         # Randomly subsample time points
-        data, time_steps, mask = subsample_timepoints(
+        data, time_steps = subsample_timepoints(
             tf.identity(data_dict["observed_data"]), 
             time_steps = tf.identity(data_dict["observed_tp"]), 
             n_tp_to_sample = n_tp_to_sample)
@@ -312,18 +293,18 @@ def subsample_observed_data(data_dict, n_tp_to_sample = None, n_points_to_cut = 
     return new_data_dict
 
 
-def split_and_subsample_batch(data_dict, data_type = "train", dataset=None,
+def split_and_subsample_batch(data_dict, data_type = "train",
                                 extrap=False, sample_tp=None, cut_tp=None):
     if data_type == "train":
         # Training set
         if extrap:
-            processed_dict = split_data_extrap(data_dict, dataset = dataset)
+            processed_dict = split_data_extrap(data_dict)
         else:
             processed_dict = split_data_interp(data_dict)   
     else:
         # Test set
         if extrap:
-            processed_dict = split_data_extrap(data_dict, dataset = dataset)
+            processed_dict = split_data_extrap(data_dict)
         else:
             processed_dict = split_data_interp(data_dict)
         
@@ -388,44 +369,26 @@ def compute_loss_all_batches(model,
             total[key] = total[key] / n_test_batches
  
     if mode=='classification':
-        if dataset == "physionet":
-            #all_test_labels = all_test_labels.reshape(-1)
-            # For each trajectory, we get n_traj_samples samples from z0 -- compute loss on all of them
-            all_test_labels = all_test_labels.repeat(n_traj_samples,1,1)
+        #all_test_labels = all_test_labels.reshape(-1)
+        # For each trajectory, we get n_traj_samples samples from z0 -- compute loss on all of them
+        all_test_labels = tf.tile(all_test_labels, [n_traj_samples,1,1])
 
 
-            idx_not_nan = 1 - tf.math.is_nan(all_test_labels)
-            classif_predictions = classif_predictions[idx_not_nan]
-            all_test_labels = all_test_labels[idx_not_nan]
+        idx_not_nan = 1 - tf.math.is_nan(all_test_labels)
+        classif_predictions = classif_predictions[idx_not_nan]
+        all_test_labels = all_test_labels[idx_not_nan]
 
-            dirname = "plots/" + str(experimentID) + "/"
-            os.makedirs(dirname, exist_ok=True)
+        dirname = "plots/" + str(experimentID) + "/"
+        os.makedirs(dirname, exist_ok=True)
 
-            total["auc"] = 0.
-            if tf.reduce_sum(all_test_labels) != 0.:
-                print("Number of labeled examples: {}".format(len(all_test_labels.reshape(-1))))
-                print("Number of examples with mortality 1: {}".format(tf.reduce_sum(all_test_labels == 1.)))
+        total["auc"] = 0.
+        if tf.reduce_sum(all_test_labels) != 0.:
+            print("Number of labeled examples: {}".format(len(all_test_labels.reshape(-1))))
+            print("Number of examples with mortality 1: {}".format(tf.reduce_sum(all_test_labels == 1.)))
 
-                # Cannot compute AUC with only 1 class
-                total["auc"] = sk.metrics.roc_auc_score(all_test_labels.cpu().numpy().reshape(-1), 
-                    classif_predictions.cpu().numpy().reshape(-1))
-            else:
-                print("Warning: Couldn't compute AUC -- all examples are from the same class")
-        if dataset == "activity":
-            all_test_labels = tf.tile(all_test_labels, [n_traj_samples,1,1])
-
-            labeled_tp = tf.reduce_sum(all_test_labels, -1) > 0.
-
-            all_test_labels = all_test_labels[labeled_tp]
-            classif_predictions = classif_predictions[labeled_tp]
-
-            # classif_predictions and all_test_labels are in on-hot-encoding -- convert to class ids
-            _, pred_class_id = tf.reduce_max(classif_predictions, -1)
-            _, class_labels = tf.reduce_max(all_test_labels, -1)
-
-            pred_class_id = pred_class_id.reshape(-1) 
-
-            total["accuracy"] = sk.metrics.accuracy_score(
-                    class_labels.cpu().numpy(), 
-                    pred_class_id.cpu().numpy())
+            # Cannot compute AUC with only 1 class
+            total["auc"] = tf.py_function(skm.roc_auc_score, [all_test_labels.numpy().reshape(-1), 
+                classif_predictions.numpy().reshape(-1)], Tout=tf.float32)
+        else:
+            print("Warning: Couldn't compute AUC -- all examples are from the same class")
     return total
