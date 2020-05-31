@@ -71,15 +71,15 @@ class Dopri5Solver(AdaptiveStepsizeODESolver):
         self.rtol = rtol if _is_iterable(rtol) else [rtol] * len(y0)
         self.atol = atol if _is_iterable(atol) else [atol] * len(y0)
         self.first_step = first_step
-        self.safety = _convert_to_tensor(safety, dtype=tf.float64, device=y0[0].device)
-        self.ifactor = _convert_to_tensor(ifactor, dtype=tf.float64, device=y0[0].device)
-        self.dfactor = _convert_to_tensor(dfactor, dtype=tf.float64, device=y0[0].device)
+        self.safety = _convert_to_tensor(safety, dtype=tf.float32, device=y0[0].device)
+        self.ifactor = _convert_to_tensor(ifactor, dtype=tf.float32, device=y0[0].device)
+        self.dfactor = _convert_to_tensor(dfactor, dtype=tf.float32, device=y0[0].device)
         self.max_num_steps = _convert_to_tensor(max_num_steps, dtype=tf.int32, device=y0[0].device)
         self.tableau = tableau if tableau is not None else _DORMAND_PRINCE_SHAMPINE_TABLEAU
         self.order = 5
 
     def before_integrate(self, t):
-        f0 = self.func(tf.cast(t[0], self.y0[0].dtype), self.y0)
+        f0 = self.func(tf.cast(t[0], self.y0[0].dtype),self.y0)
         if self.first_step is None:
             first_step = move_to_device(_select_initial_step(self.func, t[0], self.y0, 4, self.rtol[0], self.atol[0], f0=f0), t.device)
         else:

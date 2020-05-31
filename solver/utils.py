@@ -73,7 +73,6 @@ def load_pickle(filename):
 def split_last_dim(data):
     last_dim = data.shape[-1]
     last_dim = last_dim//2
-
     if len(data.shape) == 3:
         res = data[:,:,:last_dim], data[:,:,last_dim:]
 
@@ -146,23 +145,23 @@ def get_next_batch(data):
     # Make the union of all time points and perform normalization across the whole dataset
     data_dict = data.__next__()
     batch_dict = get_dict_template()
-
+    batch_dict = {k:v for k,v in batch_dict.items() if k in data_dict.keys()}
     # remove the time points where there are no observations in this batch
     non_missing_tp = tf.reduce_sum(data_dict["observed_data"],(0,2)) != 0.
-    batch_dict["observed_data"] = data_dict["observed_data"][:, non_missing_tp]
-    batch_dict["observed_tp"] = data_dict["observed_tp"][non_missing_tp]
+    batch_dict["observed_data"] = tf.boolean_mask(data_dict["observed_data"], non_missing_tp, axis=1) 
+    batch_dict["observed_tp"] = tf.boolean_mask(tf.squeeze(data_dict["observed_tp"]),non_missing_tp)
 
     batch_dict[ "data_to_predict"] = data_dict["data_to_predict"]
-    batch_dict["tp_to_predict"] = data_dict["tp_to_predict"]
+    batch_dict["tp_to_predict"] =  tf.squeeze(data_dict["tp_to_predict"])
 
     non_missing_tp = tf.reduce_sum(data_dict["data_to_predict"],(0,2)) != 0.
-    batch_dict["data_to_predict"] = data_dict["data_to_predict"][:, non_missing_tp]
-    batch_dict["tp_to_predict"] = data_dict["tp_to_predict"][non_missing_tp]
+    batch_dict["data_to_predict"] = tf.boolean_mask(data_dict["data_to_predict"], non_missing_tp, axis=1)
+    batch_dict["tp_to_predict"] =  tf.boolean_mask(tf.squeeze(data_dict["tp_to_predict"]),non_missing_tp)
 
     if ("labels" in data_dict) and (data_dict["labels"] is not None):
         batch_dict["labels"] = data_dict["labels"]
 
-    batch_dict["mode"] = data_dict["mode"]
+    #batch_dict["mode"] = data_dict["mode"]
     return batch_dict
 
 def get_h5_model(h5_path):
@@ -172,10 +171,10 @@ def get_h5_model(h5_path):
     checkpt = tf.keras.models.load_model(h5_path)
     return checkpt
 
-def update_learning_rate_optimizer(optimizer, initial_lr=0.1, decay_steps=1009, lowest = 1e-3, **kwargs):
+def update_learning_rate_optimizer(optimizer, initial_lr=0.1, decay_steps=10, lowest = 1e-3, **kwargs):
     # initial_lr: initial learning rate
     # decay_steps: number of steps to perform lr decay until lowest reached
-    schedule = tf.keras.optimizers.schedules.PolynomialDecay(initial_lr,
+    schedule = tf.keras.optimizers.schedules.InverseTimeDecay(initial_lr,
                                                             decay_steps,
                                                             lowest)
     params_dict = {'learning_rate': schedule}
@@ -187,14 +186,15 @@ def reverse(tensor):
     return tensor[idx]
 
 def create_net(n_inputs, n_outputs, n_layers = 1, 
-    n_units = 100, nonlinear = tf.keras.layers.ReLU):
-    layers = [tf.keras.layers.Dense(n_units)]
+    n_units = 100, nonlinear = tf.keras.activations.relu):
+    model = [#tf.keras.layers.InputLayer(input_shape=n_inputs, ragged=True),
+            tf.keras.layers.Dense(units=n_units)]
     for i in range(n_layers):
-        layers.append(nonlinear())
-        layers.append(tf.keras.layers.Dense(n_units))
-    layers.append(nonlinear())
-    layers.append(tf.keras.layers.Dense(n_outputs))
-    return tf.keras.models.Sequential(layers)
+        #model.add(tf.keras.layers.Activation(nonlinear))
+        model.append(tf.keras.layers.Dense(n_units, activation=nonlinear))
+    #model.add(tf.keras.layers.Activation(nonlinear))
+    model.append(tf.keras.layers.Dense(n_outputs, activation=nonlinear))
+    return tf.keras.models.Sequential(model)
 
 def get_item_from_pickle(pickle_file, item_name):
     from_pickle = load_pickle(pickle_file)
@@ -233,13 +233,11 @@ def split_data_extrap(data_dict):
     n_observed_tp = data_dict["data"].shape[1] // 2
 
     split_dict = {"observed_data": tf.identity(data_dict["data"][:,:n_observed_tp,:]),
-                "observed_tp": tf.identity(data_dict["time_steps"][:n_observed_tp]),
+                "observed_tp": tf.identity(data_dict["time_steps"][:,:n_observed_tp]),
                 "data_to_predict": tf.identity(data_dict["data"][:,n_observed_tp:,:]),
-                "tp_to_predict": tf.identity(data_dict["time_steps"][n_observed_tp:])}
- 
-    split_dict["labels"] = None 
+                "tp_to_predict": tf.identity(data_dict["time_steps"][:,n_observed_tp:])}
 
-    if ("labels" in data_dict) and (data_dict["labels"] is not None):
+    if ("labels" in data_dict):
         split_dict["labels"] = tf.identity(data_dict["labels"])
 
     split_dict["mode"] = "extrap"
@@ -251,9 +249,7 @@ def split_data_interp(data_dict):
                 "data_to_predict": tf.identity(data_dict["data"]),
                 "tp_to_predict": tf.identity(data_dict["time_steps"])}
 
-    split_dict["labels"] = None 
-
-    if ("labels" in data_dict) and (data_dict["labels"] is not None):
+    if ("labels" in data_dict):
         split_dict["labels"] = tf.identity(data_dict["labels"])
 
     split_dict["mode"] = "interp"

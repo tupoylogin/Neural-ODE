@@ -2,13 +2,14 @@ import six
 import warnings
 from typing import Iterable
 
+from tensorflow.python import ops
 import tensorflow as tf
 
 
 def cast_double(x):
     if isinstance(x, Iterable):
         try:
-            x = tf.cast(x, tf.float64)
+            x = tf.cast(x, tf.float32)
         except Exception:
             xn = []
             for xi in x:
@@ -18,8 +19,8 @@ def cast_double(x):
             x = type(x)(xn)
 
     else:
-        if hasattr(x, 'dtype') and x.dtype != tf.float64:
-            x = tf.cast(x, tf.float64)
+        if hasattr(x, 'dtype') and x.dtype != tf.float32:
+            x = tf.cast(x, tf.float32)
 
         elif type(x) != float:
             x = float(x)
@@ -319,7 +320,7 @@ def _optimal_step_size(last_step, mean_error_ratio, safety=0.9, ifactor=10.0, df
         return last_step * ifactor
 
     if mean_error_ratio < 1:
-        dfactor = _convert_to_tensor(1, dtype=tf.float64, device=mean_error_ratio.device)
+        dfactor = _convert_to_tensor(1, dtype=tf.float32, device=mean_error_ratio.device)
 
     error_ratio = tf.sqrt(mean_error_ratio)
     error_ratio = cast_double(error_ratio)
@@ -336,9 +337,8 @@ def _optimal_step_size(last_step, mean_error_ratio, safety=0.9, ifactor=10.0, df
 def _check_inputs(func, y0, t):
     tensor_input = False
     if isinstance(y0, tf.Tensor):
-        tensor_input = True
-
-        if not isinstance(y0, tf.python.ops.EagerTensor):
+        tensor_input = True      
+        if not isinstance(y0, ops.EagerTensor):
             warnings.warn('Input is *not* an EagerTensor ! '
                           'Dummy op with zeros will be performed instead.')
 
@@ -360,7 +360,7 @@ def _check_inputs(func, y0, t):
                 assert isinstance(y0[i], tf.Tensor), 'each element must be a tf.Tensor ' \
                                                      'but received {}'.format(type(y0[i]))
 
-                if not isinstance(y0[i], tf.python.ops.EagerTensor):
+                if not isinstance(y0[i], ops.EagerTensor):
                     warnings.warn('Input %d (zero-based) is *not* an EagerTensor ! '
                                   'Dummy op with zeros will be performed instead.' % (i))
 

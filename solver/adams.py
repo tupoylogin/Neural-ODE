@@ -38,7 +38,7 @@ def g_and_explicit_phi(prev_t, next_t, implicit_phi, k):
     # tf.assign(g[0], 1)
     compat.assign(g[0], 1)
 
-    c = 1 / move_to_device(tf.range(1, k + 2), prev_t[0].device)
+    c = tf.cast( 1 / move_to_device(tf.range(1, k + 2), prev_t[0].device), tf.float32)
     explicit_phi.append(implicit_phi[0])
 
     beta = tf.cast(beta, next_t.dtype)
@@ -93,9 +93,9 @@ class VariableCoefficientAdamsBashforth(AdaptiveStepsizeODESolver):
         self.implicit = implicit
         self.first_step = first_step
         self.max_order = int(max(_MIN_ORDER, min(max_order, _MAX_ORDER)))
-        self.safety = _convert_to_tensor(safety, dtype=tf.float64, device=y0[0].device)
-        self.ifactor = _convert_to_tensor(ifactor, dtype=tf.float64, device=y0[0].device)
-        self.dfactor = _convert_to_tensor(dfactor, dtype=tf.float64, device=y0[0].device)
+        self.safety = _convert_to_tensor(safety, dtype=tf.float32, device=y0[0].device)
+        self.ifactor = _convert_to_tensor(ifactor, dtype=tf.float32, device=y0[0].device)
+        self.dfactor = _convert_to_tensor(dfactor, dtype=tf.float32, device=y0[0].device)
 
     def before_integrate(self, t):
         prev_f = collections.deque(maxlen=self.max_order + 1)
@@ -107,9 +107,9 @@ class VariableCoefficientAdamsBashforth(AdaptiveStepsizeODESolver):
         prev_f.appendleft(f0)
         phi.appendleft(f0)
         if self.first_step is None:
-            first_step = _select_initial_step(self.func, t[0], self.y0, 2, self.rtol[0], self.atol[0], f0=f0).to(t)
+            first_step = _select_initial_step(self.func, t[0], self.y0, 2, self.rtol[0], self.atol[0], f0=f0)
         else:
-            first_step = _select_initial_step(self.func, t[0], self.y0, 2, self.rtol[0], self.atol[0], f0=f0).to(t)
+            first_step = _select_initial_step(self.func, t[0], self.y0, 2, self.rtol[0], self.atol[0], f0=f0)
         first_step = move_to_device(first_step, t.device)
         first_step = tf.cast(first_step, t[0].dtype)
 

@@ -29,7 +29,7 @@ class ODEFunc(tf.keras.models.Model):
         """
 
         dynamic = kwargs.pop('dynamic', True)
-        super(ODEFunc, self).__init__(**kwargs, dynamic=dynamic)
+        super().__init__(**kwargs, dynamic=dynamic)
         self.augment_dim = augment_dim
         # self.data_dim = input_dim
         # self.input_dim = input_dim + augment_dim
@@ -93,7 +93,7 @@ class ODEFunc(tf.keras.models.Model):
 class LatentODEFunc(tf.keras.models.Model):
 
     def __init__(self, input_dim, latent_dim, ode_func_net):
-        super(LatentODEFunc, self).__init__()
+        super().__init__()
         self.input_dim = input_dim
         self.gradient_net = ode_func_net
 
@@ -105,6 +105,8 @@ class LatentODEFunc(tf.keras.models.Model):
         t_local: current time point
         y: value at the current time point
         """
+        #to avoid type incompatibility
+        t_local, y = tf.cast(t_local, tf.float32), tf.cast(y, tf.float32)
         grad = self.get_ode_gradient_nn(t_local, y)
         if backwards:
             grad = -grad
@@ -118,14 +120,20 @@ class LatentODEFunc(tf.keras.models.Model):
         t_local: current time point
         y: value at the current time point
         """
+        #to avoid type incompatibility
+        t_local, y = tf.cast(t_local, tf.float32), tf.cast(y, tf.float32)
         return self.get_ode_gradient_nn(t_local, y)
 
 class LatentODEFuncPoisson(tf.keras.models.Model):
 
     def __init__(self, input_dim, latent_dim, ode_func_net, lambda_net):
-        super(LatentODEFunc, self).__init__()
+        super().__init__()
         self.input_dim = input_dim
-        self.gradient_net = ode_func_net
+        self.latent_dim = latent_dim
+        self.latent_ode = LatentODEFunc(input_dim = input_dim, 
+                                latent_dim = latent_dim, 
+                                ode_func_net = ode_func_net)
+        #self.gradient_net = ode_func_net
         self.lambda_net = lambda_net
         # The computation of poisson likelihood can become numerically unstable. 
         #The integral lambda(t) dt can take large values. In fact, it is equal to the expected number of events on the interval [0,T]
@@ -133,13 +141,16 @@ class LatentODEFuncPoisson(tf.keras.models.Model):
         #So we divide lambda by the constant and then multiply the integral of lambda by the constant
         self.const_for_lambda = tf.constant([100.], tf.float32)
 
-    @tf.function
+    #@tf.function
     def call(self, t_local, y, backwards=False):
         """
         Perform one step in solving ODE. Given current data point y and current time point t_local, returns gradient dy/dt at this time point
         t_local: current time point
         y: value at the current time point
         """
+        #to avoid type incompatibility
+        t_local, y = tf.cast(t_local, tf.float32), tf.cast(y, tf.float32)
+
         grad = self.get_ode_gradient_nn(t_local, y)
         if backwards:
             grad = -grad
@@ -178,7 +189,7 @@ class LatentODEFuncPoisson(tf.keras.models.Model):
             int_lambda = int_lambda * self.const_for_lambda
         
         # Latents for performing reconstruction (y) have the same size as latent poisson rate (log_lambdas)
-        assert(augmented.shape[-1] == latent_lam_dim)
+        assert(y.shape[-1] == latent_lam_dim)
 
         return y, log_lambdas, int_lambda, y_latent_lam
 
@@ -201,7 +212,7 @@ class ODEBlock(tf.keras.models.Model):
             solver: ODE solver. Defaults to DOPRI5.
         """
         dynamic = kwargs.pop('dynamic', True)
-        super(ODEBlock, self).__init__(**kwargs, dynamic=dynamic)
+        super().__init__(**kwargs, dynamic=dynamic)
 
         self.adjoint = adjoint
         self.is_conv = is_conv
@@ -215,6 +226,7 @@ class ODEBlock(tf.keras.models.Model):
         else:
             self.options = None
 
+    @tf.function
     def call(self, x, training=None, eval_times=None, **kwargs):
         """
         Solves ODE starting from x.
@@ -317,7 +329,7 @@ class ODENet(tf.keras.models.Model):
             solver: ODE solver. Defaults to DOPRI5.
         """
         dynamic = kwargs.pop('dynamic', True)
-        super(ODENet, self).__init__(**kwargs, dynamic=dynamic)
+        super().__init__(**kwargs, dynamic=dynamic)
 
         self.hidden_dim = hidden_dim
         self.augment_dim = augment_dim
@@ -331,7 +343,7 @@ class ODENet(tf.keras.models.Model):
         self.odeblock = ODEBlock(odefunc, tol=tol, adjoint=adjoint, solver=solver)
         self.linear_layer = tf.keras.layers.Dense(self.output_dim)
 
-    # @tf.function
+    #@tf.function
     def call(self, x, training=None, return_features=False):
         features = self.odeblock(x, training=training)
 
@@ -348,7 +360,7 @@ class Conv2dTime(tf.keras.models.Model):
     """
     def __init__(self, dim_out, kernel_size=3, stride=1, padding="valid", dilation=1,
                  bias=True, transpose=False):
-        super(Conv2dTime, self).__init__()
+        super().__init__()
         module = tf.keras.layers.Conv2DTranspose if transpose else tf.keras.layers.Conv2D
 
         self._padding = padding
@@ -360,7 +372,7 @@ class Conv2dTime(tf.keras.models.Model):
 
         self.channel_axis = 1 if tf.keras.backend.image_data_format() == 'channels_first' else -1
 
-    @tf.function
+    #@tf.function
     def call(self, t, x, training=None, **kwargs):
         # Remove cast when Keras supports double
         t = tf.cast(t, x.dtype)
@@ -397,7 +409,7 @@ class Conv2dODEFunc(tf.keras.models.Model):
                 One of 'relu' and 'softplus'
         """
         dynamic = kwargs.pop('dynamic', True)
-        super(Conv2dODEFunc, self).__init__(**kwargs, dynamic=dynamic)
+        super().__init__(**kwargs, dynamic=dynamic)
 
         self.augment_dim = augment_dim
         self.time_dependent = time_dependent
@@ -440,7 +452,7 @@ class Conv2dODEFunc(tf.keras.models.Model):
 
             self.built = True
 
-    @tf.function
+    #@tf.function
     def call(self, t, x, training=None, **kwargs):
         """
         Parameters
@@ -490,7 +502,7 @@ class Conv1dTime(tf.keras.models.Model):
     """
     def __init__(self, dim_out, kernel_size=3, stride=1, padding="valid", dilation=1,
                  bias=True, data_format="channels_last"):
-        super(Conv1dTime, self).__init__()
+        super().__init__()
         module = tf.keras.layers.Conv1D
 
         self.data_format = data_format
@@ -503,7 +515,7 @@ class Conv1dTime(tf.keras.models.Model):
 
         self.channel_axis = 1 if self.data_format == 'channels_first' else -1
 
-    @tf.function
+    #@tf.function
     def call(self, t, x, training=None, **kwargs):
         # Remove cast when Keras supports double
         t = tf.cast(t, x.dtype)
@@ -540,7 +552,7 @@ class Conv1dODEFunc(tf.keras.models.Model):
                 One of 'relu' and 'softplus'
         """
         dynamic = kwargs.pop('dynamic', True)
-        super(Conv1dODEFunc, self).__init__(**kwargs, dynamic=dynamic)
+        super().__init__(**kwargs, dynamic=dynamic)
 
         self.augment_dim = augment_dim
         self.time_dependent = time_dependent
@@ -584,7 +596,7 @@ class Conv1dODEFunc(tf.keras.models.Model):
 
             self.built = True
 
-    @tf.function
+    #@tf.function
     def call(self, t, x, training=None, **kwargs):
         """
         Parameters
@@ -661,7 +673,7 @@ class Conv2dODENet(tf.keras.models.Model):
                  tol=1e-3, adjoint=False, solver='dopri5', **kwargs):
 
         dynamic = kwargs.pop('dynamic', True)
-        super(Conv2dODENet, self).__init__(**kwargs, dynamic=dynamic)
+        super().__init__(**kwargs, dynamic=dynamic)
 
         self.num_filters = num_filters
         self.augment_dim = augment_dim
@@ -683,6 +695,7 @@ class Conv2dODENet(tf.keras.models.Model):
                                                 strides=out_strides,
                                                 padding='same')
 
+    #@tf.function
     def call(self, x, training=None, return_features=False):
         features = self.odeblock(x, training=training)
 
@@ -729,7 +742,7 @@ class Conv1dODENet(tf.keras.models.Model):
                  tol=1e-3, adjoint=False, solver='dopri5', **kwargs):
 
         dynamic = kwargs.pop('dynamic', True)
-        super(Conv2dODENet, self).__init__(**kwargs, dynamic=dynamic)
+        super().__init__(**kwargs, dynamic=dynamic)
 
         self.num_filters = num_filters
         self.augment_dim = augment_dim
@@ -751,6 +764,7 @@ class Conv1dODENet(tf.keras.models.Model):
                                                 strides=out_strides,
                                                 padding='same')
 
+    #@tf.function
     def call(self, x, training=None, return_features=False):
         features = self.odeblock(x, training=training)
 
@@ -764,43 +778,52 @@ class Conv1dODENet(tf.keras.models.Model):
 
 class DiffeqSolver(tf.keras.models.Model):
     def __init__(self, input_dim, ode_func, method, latents, 
-			odeint_rtol = 1e-4, odeint_atol = 1e-5):
-        super(DiffeqSolver).__init__()
+            odeint_rtol = 1e-4, odeint_atol = 1e-5, **kwargs):
+        dynamic = kwargs.pop('dynamic', True)
+        super().__init__()
 
         self.method = method
         self.latents = latents
         self.input_dim = input_dim
+        self.ode_func = ode_func
 
         self.odeint_rtol = odeint_rtol
         self.odeint_atol = odeint_atol
-
-        def call(self, first_point, time_steps_to_predict, 
-            backwards = False):
-            """
-            Decode trajectory through an ODE Solver
-            """
-            n_traj_samples, n_traj = first_point.size()[0], first_point.size()[1]
-            n_dims = first_point.size()[-1]
-
-            pred_y = odeint(self.ode_func, first_point, time_steps_to_predict, 
-        	rtol=self.odeint_rtol, atol=self.odeint_atol, method = self.method)
-            # shape: [n_traj_samples, n_traj, n_tp, n_dim]
-            pred_y = tf.transpose(pred_y, perm=[1,2,0,3])
-            return pred_y
         
-        def sample_traj_from_prior(self, starting_point_enc, time_steps_to_predict, 
-            n_traj_samples = 1):
-            """
-            Decode the trajectory through ODE Solver using samples from the prior
-            time_steps_to_predict: time steps at which we want to sample the new trajectory
-            """
-            func = self.ode_func.sample_next_point_from_prior
+    #@tf.function
+    def call(self, first_point, time_steps_to_predict, 
+        backwards = False, adjoint=False):
+        """
+        Decode trajectory through an ODE Solver
+        """
+        first_point, time_steps_to_predict = tf.cast(first_point, tf.float32), tf.cast(time_steps_to_predict, tf.float32)
+        n_traj_samples, n_traj = first_point.shape[0], first_point.shape[1]
+        n_dims = first_point.shape[-1]
+        if adjoint:
+            pred_y = odeint_adjoint(self.ode_func, first_point,time_steps_to_predict,
+            rtol=self.odeint_rtol, atol=self.odeint_atol, method = self.method)
+        else:
+            pred_y = odeint(self.ode_func, first_point, time_steps_to_predict, 
+            rtol=self.odeint_rtol, atol=self.odeint_atol, method = self.method)
+        #print('bef {}'.format(pred_y.shape))
+        # shape: [n_traj_samples, n_traj, n_tp, n_dim]
+        pred_y = tf.transpose(pred_y, perm=[1,2,0,3])
+        #print('af {}'.format(pred_y.shape))
+        return pred_y
+        
+    def sample_traj_from_prior(self, starting_point_enc, time_steps_to_predict, 
+        n_traj_samples = 1):
+        """
+        Decode the trajectory through ODE Solver using samples from the prior
+        time_steps_to_predict: time steps at which we want to sample the new trajectory
+        """
+        func = self.ode_func.sample_next_point_from_prior
 
-            pred_y = odeint(func, starting_point_enc, time_steps_to_predict, 
-        	rtol=self.odeint_rtol, atol=self.odeint_atol, method = self.method)
-            # shape: [n_traj_samples, n_traj, n_tp, n_dim]
-            pred_y = tf.transpose(pred_y, perm = [1,2,0,3])
-            return pred_y
+        pred_y = odeint(func, starting_point_enc, time_steps_to_predict, 
+    	rtol=self.odeint_rtol, atol=self.odeint_atol, method = self.method)
+        # shape: [n_traj_samples, n_traj, n_tp, n_dim]
+        pred_y = tf.transpose(pred_y, perm = [1,2,0,3])
+        return pred_y
 
 class LatentODEVAE(VAEBaseline):
     """
@@ -819,31 +842,43 @@ class LatentODEVAE(VAEBaseline):
                 use_poisson_proc=False, 
                 linear_classifier=False, 
                 n_labels=1, 
-                train_classif_w_reconstr=False):
-        super(LatentODEVAE).__init__(input_dim, latent_dim, z0_prior, 
-                        obsrv_std=obsrv_std, use_binary_classif=use_binary_classif, 
-                        classif_per_tp=classif_per_tp, use_poisson_proc=use_poisson_proc, 
-                        linear_classifier=linear_classifier, n_labels=n_labels, 
-                        train_classif_w_reconstr=train_classif_w_reconstr)
+                train_classif_w_reconstr=False,
+                dynamic = True):
+        super().__init__(input_dim, latent_dim, z0_prior)
+        self.obsrv_std=obsrv_std
+        self.use_binary_classif=use_binary_classif
+        self.classif_per_tp=classif_per_tp
+        self.use_poisson_proc=use_poisson_proc
+        self.linear_classifier=linear_classifier
+        self.n_labels=n_labels
+        self.train_classif_w_reconstr=train_classif_w_reconstr
         self.encoder_z0 = encoder_z0
         self.diffeq_solver = diffeq_solver
         self.decoder = decoder
         self.use_poisson_proc = use_poisson_proc
+        #self.dynamic = dynamic
+
+    def call(self, data):
+        n_traj_samples=1 
+        mode=None
+        time_steps_to_predict, truth, truth_time_steps = data
+        return self.get_reconstruction(time_steps_to_predict, truth, truth_time_steps, n_traj_samples=1, mode=None)[0]
     
     def get_reconstruction(self, time_steps_to_predict, truth, truth_time_steps,
-                            n_traj_samples=1, run_backwards=True, mode=None):
+                            n_traj_samples=1, mode=None):
         
         if isinstance(self.encoder_z0, ODERNNEncoder):
             first_point_mu, first_point_std = self.encoder_z0(
-                                                truth, truth_time_steps, 
-                                                run_backwards = run_backwards)
+                                                truth, truth_time_steps)
             means_z0 = tf.tile(first_point_mu, [n_traj_samples, 1, 1])
             sigma_z0 = tf.tile(first_point_std, [n_traj_samples, 1, 1])
+            #print(means_z0)
+            #print(sigma_z0)
             first_point_enc = tfp.distributions.Normal(loc=means_z0, scale=sigma_z0).sample()
         else:
             raise Exception('Unlnown encoder type: {}'.format(type(self.encoder_z0.__name__)))
 
-        first_point_enc = tf.abs(first_point_enc)
+        #first_point_enc = tf.abs(first_point_enc)
 
         if self.use_poisson_proc:
             n_traj_samples, n_traj, n_dims = first_point_enc.shape
@@ -857,9 +892,11 @@ class LatentODEVAE(VAEBaseline):
         # Shape of sol_y [n_traj_samples, n_samples, n_timepoints, n_latents]
         sol_y = self.diffeq_solver(first_point_enc_aug, time_steps_to_predict)
 
+
         if self.use_poisson_proc:
             sol_y, log_lambda_y, int_lambda, _ = self.diffeq_solver.ode_func.extract_poisson_rate(sol_y)
         
+        #print(sol_y)
         pred_x = self.decoder(sol_y)
 
         all_extra_info = {
@@ -880,21 +917,22 @@ class LatentODEVAE(VAEBaseline):
 
         return pred_x, all_extra_info
 
-        def sample_traj_from_prior(self, time_steps_to_predict, n_traj_samples=1):
-            # Sample z0 from prior
-            starting_point_enc = tf.squeeze(self.z0_prior.sample([n_traj_samples, 1, self.latent_dim]), -1)
+    def sample_traj_from_prior(self, time_steps_to_predict, n_traj_samples=1):
+        # Sample z0 from prior
+        #starting_point_enc = tf.squeeze(self.z0_prior.sample([n_traj_samples, 1, self.latent_dim]), -1)
+        starting_point_enc = self.z0_prior.sample([n_traj_samples, 1, self.latent_dim])
 
-            starting_point_enc_aug = starting_point_enc
-            if self.use_poisson_proc:
-                n_traj_samples, n_traj, n_dims = starting_point_enc.size()
-                # append a vector of zeros to compute the integral of lambda
-                zeros = tf.zeros([n_traj_samples, n_traj,self.input_dim], tf.float64)
-                starting_point_enc_aug = tf.concat([starting_point_enc, zeros], -1)
+        starting_point_enc_aug = starting_point_enc
+        if self.use_poisson_proc:
+            n_traj_samples, n_traj, n_dims = starting_point_enc.shape
+            # append a vector of zeros to compute the integral of lambda
+            zeros = tf.zeros([n_traj_samples, n_traj,self.input_dim], tf.float32)
+            starting_point_enc_aug = tf.concat([starting_point_enc, zeros], -1)
 
-            sol_y = self.diffeq_solver.sample_traj_from_prior(starting_point_enc_aug, time_steps_to_predict, 
-                n_traj_samples = 3)
+        sol_y = self.diffeq_solver.sample_traj_from_prior(starting_point_enc_aug, time_steps_to_predict, 
+            n_traj_samples = 3)
 
-            if self.use_poisson_proc:
-                sol_y, log_lambda_y, int_lambda, _ = self.diffeq_solver.ode_func.extract_poisson_rate(sol_y)
-                
-            return self.decoder(sol_y)
+        if self.use_poisson_proc:
+            sol_y, log_lambda_y, int_lambda, _ = self.diffeq_solver.ode_func.extract_poisson_rate(sol_y)
+            
+        return self.decoder(sol_y)

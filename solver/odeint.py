@@ -1,4 +1,7 @@
+from tensorflow.python.eager.context import eager_mode
 import tensorflow as tf
+#eager = tf.python.eager.context.eager_mode
+
 
 from solver.adams import VariableCoefficientAdamsBashforth
 from solver.dopri5 import Dopri5Solver
@@ -55,7 +58,8 @@ def odeint(func, y0, t, rtol=1e-7, atol=1e-9, method=None, options=None):
         TypeError: if `options` is supplied without `method`, or if `t` or `y0` has
             an invalid dtype.
     """
-    with tf.python.eager.context.eager_mode():
+    with eager_mode():
+    #with tf.python.eager.context.eager_mode():
         tensor_input, func, y0, t = _check_inputs(func, y0, t)
 
         if options is None:
@@ -65,7 +69,7 @@ def odeint(func, y0, t, rtol=1e-7, atol=1e-9, method=None, options=None):
 
         if method is None:
             method = 'dopri5'
-
+            
         solver = SOLVERS[method](func, y0, rtol=rtol, atol=atol, **options)
         solution = solver.integrate(t)
 

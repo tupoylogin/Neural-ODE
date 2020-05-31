@@ -55,7 +55,7 @@ def _optimal_step_size(last_step, mean_error_ratio, safety=0.9, ifactor=10.0, df
     if mean_error_ratio == 0:
         return last_step * ifactor
     if mean_error_ratio < 1:
-        dfactor = _convert_to_tensor(1, dtype=tf.float64, device=mean_error_ratio.device)
+        dfactor = _convert_to_tensor(1, dtype=tf.float32, device=mean_error_ratio.device)
     error_ratio = tf.cast(mean_error_ratio, last_step.dtype)
     exponent = tf.convert_to_tensor(1 / order, dtype=last_step.dtype)
     factor = tf.maximum(1. / ifactor, tf.minimum((error_ratio ** exponent) / safety, 1 / dfactor))
@@ -81,9 +81,9 @@ class Tsit5Solver(AdaptiveStepsizeODESolver):
         self.rtol = rtol
         self.atol = atol
         self.first_step = first_step
-        self.safety = _convert_to_tensor(safety, dtype=tf.float64, device=y0[0].device)
-        self.ifactor = _convert_to_tensor(ifactor, dtype=tf.float64, device=y0[0].device)
-        self.dfactor = _convert_to_tensor(dfactor, dtype=tf.float64, device=y0[0].device)
+        self.safety = _convert_to_tensor(safety, dtype=tf.float32, device=y0[0].device)
+        self.ifactor = _convert_to_tensor(ifactor, dtype=tf.float32, device=y0[0].device)
+        self.dfactor = _convert_to_tensor(dfactor, dtype=tf.float32, device=y0[0].device)
         self.max_num_steps = _convert_to_tensor(max_num_steps, dtype=tf.int32, device=y0[0].device)
         self.order = 5
 

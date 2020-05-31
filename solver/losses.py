@@ -4,11 +4,10 @@ import tensorflow_probability as tfp
 
 def gaussian_log_likelihood(mu_2d, data_2d, obsrv_std, indices = None):
     n_data_points = mu_2d.shape[-1]
-
     if n_data_points > 0:
         gaussian = tfp.distributions.Independent(tfp.distributions.Normal(loc = mu_2d,
-                                                 scale = tf.tile(obsrv_std,n_data_points)), 1)
-        log_prob = gaussian.log_prob(data_2d) 
+                                                 scale = tf.tile(tf.expand_dims(obsrv_std,0),[n_data_points])), 1)
+        log_prob = gaussian.log_prob(data_2d)
         log_prob = log_prob / n_data_points 
     else:
         log_prob = tf.squeeze(tf.zeros([1]))
@@ -52,8 +51,7 @@ def gaussian_log_density(mu, data, obsrv_std):
     mu_flat =tf.reshape(mu, [n_traj_samples*n_traj, n_timepoints * n_dims])
     n_traj_samples, n_traj, n_timepoints, n_dims = data.shape
     data_flat = tf.reshape(data, [n_traj_samples*n_traj, n_timepoints * n_dims])
-
-    res = gaussian_log_likelihood(mu_flat, data_flat, obsrv_std)
+    res = gaussian_log_likelihood(mu_flat, data_flat, tf.cast(obsrv_std, tf.float32))
     res = tf.transpose(tf.reshape(res, [n_traj_samples, n_traj]), perm=[0,1])
     return res
 
